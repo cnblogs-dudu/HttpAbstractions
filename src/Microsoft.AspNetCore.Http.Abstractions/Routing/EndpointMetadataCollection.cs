@@ -3,10 +3,12 @@
 
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
-namespace Microsoft.AspNetCore.Routing
+namespace Microsoft.AspNetCore.Http
 {
     /// <summary>
     /// A collection of arbitrary metadata associated with an endpoint.
@@ -24,6 +26,7 @@ namespace Microsoft.AspNetCore.Routing
         public static readonly EndpointMetadataCollection Empty = new EndpointMetadataCollection(Array.Empty<object>());
 
         private readonly object[] _items;
+        private readonly ConcurrentDictionary<Type, object[]> _cache;
 
         /// <summary>
         /// Creates a new <see cref="EndpointMetadataCollection"/>.
@@ -37,6 +40,7 @@ namespace Microsoft.AspNetCore.Routing
             }
 
             _items = items.ToArray();
+            _cache = new ConcurrentDictionary<Type, object[]>();
         }
 
         /// <summary>
@@ -67,18 +71,23 @@ namespace Microsoft.AspNetCore.Routing
         /// <returns>
         /// The most significant metadata of type <typeparamref name="T"/> or <c>null</c>.
         /// </returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T GetMetadata<T>() where T : class
         {
-            for (var i = _items.Length - 1; i >= 0; i--)
+            if (_cache.TryGetValue(typeof(T), out var result))
             {
-                var item = _items[i] as T;
-                if (item != null)
-                {
-                    return item;
-                }
+                var length = result.Length;
+                return length > 0 ? (T)result[length - 1] : default;
             }
 
-            return default;
+            return GetMetadataSlow<T>();
+        }
+
+        private T GetMetadataSlow<T>() where T : class
+        {
+            var array = GetOrderedMetadataSlow<T>();
+            var length = array.Length;
+            return length > 0 ? array[length - 1] : default;
         }
 
         /// <summary>
@@ -87,16 +96,31 @@ namespace Microsoft.AspNetCore.Routing
         /// </summary>
         /// <typeparam name="T">The type of metadata.</typeparam>
         /// <returns>A sequence of metadata items of <typeparamref name="T"/>.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public IEnumerable<T> GetOrderedMetadata<T>() where T : class
         {
+            if (_cache.TryGetValue(typeof(T), out var result))
+            {
+                return (T[])result;
+            }
+
+            return GetOrderedMetadataSlow<T>();
+        }
+
+        private T[] GetOrderedMetadataSlow<T>() where T : class
+        {
+            var items = new List<T>();
             for (var i = 0; i < _items.Length; i++)
             {
-                var item = _items[i] as T;
-                if (item != null)
+                if (_items[i] is T item)
                 {
-                    yield return item;
+                    items.Add(item);
                 }
             }
+
+            var array = items.ToArray();
+            _cache.TryAdd(typeof(T), array);
+            return array;
         }
 
         /// <summary>
@@ -125,19 +149,18 @@ namespace Microsoft.AspNetCore.Routing
             // Intentionally not readonly to prevent defensive struct copies
             private object[] _items;
             private int _index;
-            private object _current;
 
             internal Enumerator(EndpointMetadataCollection collection)
             {
                 _items = collection._items;
                 _index = 0;
-                _current = null;
+                Current = null;
             }
 
             /// <summary>
             /// Gets the element at the current position of the enumerator
             /// </summary>
-            public object Current => _current;
+            public object Current { get; private set; }
 
             /// <summary>
             /// Releases all resources used by the <see cref="Enumerator"/>.
@@ -157,11 +180,11 @@ namespace Microsoft.AspNetCore.Routing
             {
                 if (_index < _items.Length)
                 {
-                    _current = _items[_index++];
+                    Current = _items[_index++];
                     return true;
                 }
 
-                _current = null;
+                Current = null;
                 return false;
             }
 
@@ -171,7 +194,7 @@ namespace Microsoft.AspNetCore.Routing
             public void Reset()
             {
                 _index = 0;
-                _current = null;
+                Current = null;
             }
         }
     }
