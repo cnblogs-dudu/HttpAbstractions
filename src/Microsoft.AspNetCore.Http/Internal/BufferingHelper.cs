@@ -49,6 +49,12 @@ namespace Microsoft.AspNetCore.Http.Internal
             if (!body.CanSeek)
             {
                 var fileStream = new FileBufferingReadStream(body, bufferThreshold, bufferLimit, _getTempDirectory);
+
+                if (request.ContentLength.HasValue && request.ContentLength > 0)
+                {
+                    fileStream.SetLength(request.ContentLength.Value);
+                }
+
                 request.Body = fileStream;
                 request.HttpContext.Response.RegisterForDispose(fileStream);
             }

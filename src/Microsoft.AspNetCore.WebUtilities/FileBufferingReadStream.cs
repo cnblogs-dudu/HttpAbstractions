@@ -30,6 +30,7 @@ namespace Microsoft.AspNetCore.WebUtilities
         private byte[] _rentedBuffer;
         private bool _inMemory = true;
         private bool _completelyBuffered;
+        private long _length;
 
         private bool _disposed;
 
@@ -148,7 +149,7 @@ namespace Microsoft.AspNetCore.WebUtilities
 
         public override long Length
         {
-            get { return _buffer.Length; }
+            get { return _length; }
         }
 
         public override long Position
@@ -246,6 +247,7 @@ namespace Microsoft.AspNetCore.WebUtilities
             else
             {
                 _completelyBuffered = true;
+                _length = _buffer.Length;
             }
 
             return read;
@@ -301,6 +303,7 @@ namespace Microsoft.AspNetCore.WebUtilities
             else
             {
                 _completelyBuffered = true;
+                _length = _buffer.Length;
             }
 
             return read;
@@ -318,7 +321,7 @@ namespace Microsoft.AspNetCore.WebUtilities
 
         public override void SetLength(long value)
         {
-            throw new NotSupportedException();
+            _length = value;
         }
 
         public override void Flush()
