@@ -3,6 +3,7 @@
 
 using System;
 using System.IO;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Xunit;
@@ -289,6 +290,33 @@ namespace Microsoft.AspNetCore.WebUtilities
             }
 
             Assert.False(File.Exists(tempFileName));
+        }
+
+        [Fact]
+        public void FileBufferingReadStream_Works_With_StreamContent()
+        {
+            int length = 568;
+            using (var stream = new FileBufferingReadStream(
+                inner: MakeStream(length), 
+                innerLength: length, 
+                memoryThreshold: 512, 
+                bufferLimit: 1024, 
+                tempFileDirectoryAccessor: GetCurrentDirectory))
+            {
+                var streamContent = new StreamContent(stream);
+                Assert.NotNull(streamContent.Headers.ContentLength);
+                Assert.Equal(length, streamContent.Headers.ContentLength.Value);
+
+                using (var ms = new MemoryStream())
+                {
+                    stream.CopyTo(ms);
+
+                    stream.Seek(0, 0);
+                    streamContent = new StreamContent(stream);
+                    Assert.NotNull(streamContent.Headers.ContentLength);
+                    Assert.Equal(length, streamContent.Headers.ContentLength.Value);
+                }
+            }
         }
 
         private static string GetCurrentDirectory()

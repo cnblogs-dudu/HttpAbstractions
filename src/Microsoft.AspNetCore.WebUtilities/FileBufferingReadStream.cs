@@ -19,6 +19,7 @@ namespace Microsoft.AspNetCore.WebUtilities
     {
         private const int _maxRentedBufferSize = 1024 * 1024; // 1MB
         private readonly Stream _inner;
+        private readonly long? _innerLength;
         private readonly ArrayPool<byte> _bytePool;
         private readonly int _memoryThreshold;
         private readonly long? _bufferLimit;
@@ -40,6 +41,17 @@ namespace Microsoft.AspNetCore.WebUtilities
             Func<string> tempFileDirectoryAccessor)
             : this(inner, memoryThreshold, bufferLimit, tempFileDirectoryAccessor, ArrayPool<byte>.Shared)
         {
+        }
+
+        public FileBufferingReadStream(
+            Stream inner,
+            long? innerLength,
+            int memoryThreshold,
+            long? bufferLimit,
+            Func<string> tempFileDirectoryAccessor)
+            : this(inner, memoryThreshold, bufferLimit, tempFileDirectoryAccessor, ArrayPool<byte>.Shared)
+        {
+            _innerLength = innerLength;
         }
 
         public FileBufferingReadStream(
@@ -148,7 +160,11 @@ namespace Microsoft.AspNetCore.WebUtilities
 
         public override long Length
         {
-            get { return _buffer.Length; }
+            get
+            {
+                var useInnerLength = _innerLength.HasValue && _innerLength > 0 && !_completelyBuffered && _buffer.Position == 0;
+                return useInnerLength ?_innerLength.Value : _buffer.Length;
+            }
         }
 
         public override long Position
